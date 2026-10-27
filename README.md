@@ -5,6 +5,8 @@ SegFormer-B0 segmentation model, and reviewing saved distress predictions. The
 responsive interface supports laptops and phones. This repository distributes
 source code; it is not a hosted web service.
 
+Already configured? Use the **[short daily run guide](QUICK_START.md)**.
+
 ## Features
 
 - Private image storage and inspection records in Supabase.
