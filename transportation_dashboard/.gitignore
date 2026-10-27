@@ -1,0 +1,10 @@
+.venv/
+.venv-windows-backup/
+__pycache__/
+*.pyc
+.DS_Store
+.env
+.env.*
+!.env.example
+# Local inspection files and databases must not become public source artifacts.
+database/

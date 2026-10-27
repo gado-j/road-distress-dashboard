@@ -1,0 +1,46 @@
+# Local Python environments and caches
+**/.venv/
+**/.venv-windows-backup/
+**/__pycache__/
+*.py[cod]
+.DS_Store
+.vscode/
+# Credentials stay on the backend, never in source control
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+# Workspace-only research, reference projects and local operator instructions
+/research/
+/ITS-Scorecard-scorecard-deployment-readme/
+/*.pdf
+/RUN_PROJECT.md
+/transportation_dashboard/backups/
+/transportation_dashboard/database/
+/transportation_dashboard/dataset/
+# Weights, downloaded datasets and generated inference files are separate assets
+*.pt
+*.pth
+*.onnx
+*.safetensors
+*.zip
+*.part
+*.sqlite
+*.db
+*.csv
+*.tsv
+*.jpg
+*.jpeg
+*.png
+*.webp
+*.mp4
+*.mov
+/Attain_SegFormer_Portable/test_samples/
+/Attain_SegFormer_Portable/test_results/
+# Optional release-owned synthetic samples and reviewed screenshots
+!/samples/*.png
+!/docs/screenshots/*.png
+# Superseded machine-specific startup notes
+/transportation_dashboard/README.txt
