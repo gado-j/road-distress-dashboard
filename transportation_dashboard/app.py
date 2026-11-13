@@ -9,12 +9,12 @@ import io
 import warnings
 from uuid import UUID
 
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageDraw, UnidentifiedImageError
 from starlette.concurrency import run_in_threadpool
 import storage_backend as storage
 
 from fastapi import FastAPI, File, UploadFile, HTTPException, Request
-from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
+from fastapi.responses import FileResponse, RedirectResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -230,6 +230,40 @@ def analyze_asset(asset_id: UUID):
         raise HTTPException(503, "Could not queue analysis. Original image is safe; retry shortly.")
 
 
+@app.get('/api/analysis/{run_id}/detections-preview')
+def detections_preview(run_id: UUID):
+    """Draw saved YOLO boxes over the original; this never reruns inference."""
+    try:
+        c = storage.client()
+        rows = c.table('analysis_runs').select('media_id,status,raw_output').eq('id', str(run_id)).limit(1).execute().data
+        if not rows or rows[0]['status'] != 'completed':
+            raise HTTPException(404, 'Completed analysis not found')
+        result = rows[0].get('raw_output') or {}
+        if result.get('task_type') != 'detection' or result.get('model_name') != 'YOLO11s Pavement':
+            raise HTTPException(404, 'Detection preview not found')
+        record = storage.media_record(rows[0]['media_id'])
+        if not record or record['upload_status'] != 'ready':
+            raise HTTPException(404, 'Original image not found')
+        original = c.storage.from_(record['bucket_id']).download(record['object_path'])
+        with Image.open(io.BytesIO(original)) as source:
+            canvas = source.convert('RGB')
+        draw = ImageDraw.Draw(canvas)
+        for item in result.get('detections', []):
+            box = item['xyxy']
+            color = '#db6b4f' if item['label'] == 'Manhole' else '#00a5aa'
+            draw.rectangle(box, outline=color, width=max(2, canvas.width // 500))
+            label = f"{item['label']} {item['confidence']:.2f}"
+            x, y = int(box[0]), max(0, int(box[1])-17)
+            draw.rectangle((x,y,min(canvas.width,x+len(label)*7+5),y+15), fill='#102b36')
+            draw.text((x+2,y+1), label, fill='white')
+        output = io.BytesIO()
+        canvas.save(output, format='JPEG', quality=88)
+        return Response(output.getvalue(), media_type='image/jpeg', headers={'Cache-Control':'no-store'})
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(503, 'Could not render saved detections.')
+
 @app.get("/api/analysis/{run_id}/{kind}")
 def analysis_artifact(run_id: UUID, kind: Literal['mask', 'overlay']):
     try:
@@ -245,6 +279,7 @@ def analysis_artifact(run_id: UUID, kind: Literal['mask', 'overlay']):
         raise
     except Exception:
         raise HTTPException(503, "Could not retrieve analysis artifact.")
+
 
 @app.post("/api/assets/{asset_id}/analyze-preview")
 def analyze_preview(asset_id: UUID):

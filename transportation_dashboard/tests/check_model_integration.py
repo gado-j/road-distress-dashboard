@@ -15,7 +15,17 @@ import storage_backend as storage
 
 c = storage.client()
 created = []
-model_dir = Path(__file__).resolve().parents[2] / 'Attain_SegFormer_Portable'
+model_dir = Path(__file__).resolve().parents[2] / 'YOLO11s_Pavement'
+from io import BytesIO
+from PIL import Image
+
+def sample():
+    return (model_dir / 'samples' / 'Roadimage1.jpg').read_bytes()
+
+def blank():
+    out = BytesIO()
+    Image.new('RGB', (640, 640), '#777777').save(out, 'JPEG')
+    return out.getvalue()
 
 
 def upload(api, content, name):
@@ -54,25 +64,26 @@ def cleanup():
 
 try:
     with TestClient(app) as api:
-        saved,record=upload(api,(model_dir/'road2.jpg').read_bytes(),'auto-analysis-crack.jpg')
+        saved,record=upload(api,sample(),'auto-analysis-crack.jpg')
         run=wait_run(saved['analysis_run_id'],'completed')
-        assert any(item['class_id']==5 for item in run['raw_output']['classes'])
+        assert any(item['class_id']==0 and item['label']=='Crack' for item in run['raw_output']['classes'])
         assert len(run['model_version'])==64
         rows=c.table('predictions').select('*').eq('analysis_run_id',run['id']).execute().data
-        assert rows and all(r['risk_condition'] is None and r['confidence'] is None for r in rows)
+        assert rows and all(r['risk_condition'] is None and r['confidence'] is not None and r['geometry']['coordinate_space']=='original_image_pixels' for r in rows)
         asset=next(a for a in api.get('/api/assets').json()['assets'] if a['id']==record['id'])
-        assert asset['analysis_status']=='completed' and 'Linear crack' in asset['predicted_hazard_type']
+        assert asset['analysis_status']=='completed' and 'Crack' in asset['predicted_hazard_type']
+        assert api.get(f"/api/analysis/{run['id']}/detections-preview").status_code==200
         assert api.delete(f"/api/assets/{record['id']}").status_code==409
-        print('PASS: upload automatically analyzed by real API; saved labels, fingerprint, timing; no invented risk/confidence')
-        saved,record=upload(api,(model_dir/'road.jpg').read_bytes(),'auto-analysis-background.jpg')
+        print('PASS: upload automatically analyzed by real API; saved labels, fingerprint, timing; no invented risk')
+        saved,record=upload(api,blank(),'auto-analysis-background.jpg')
         run=wait_run(saved['analysis_run_id'],'completed')
         assert run['raw_output']['classes']==[]
         assert c.table('predictions').select('id').eq('analysis_run_id',run['id']).execute().data==[]
         asset=next(a for a in api.get('/api/assets').json()['assets'] if a['id']==record['id'])
         assert asset['predicted_hazard_type']=='No distress predicted'
-        print('PASS: real background-only result is completed and saved, with zero distress rows')
+        print('PASS: real no-detection result is completed and saved, with zero distress rows')
         with patch.object(jobs,'request_analysis_bytes',side_effect=httpx.ConnectError('simulated offline')):
-            saved,record=upload(api,(model_dir/'road2.jpg').read_bytes(),'auto-analysis-retry.jpg')
+            saved,record=upload(api,sample(),'auto-analysis-retry.jpg')
             failed=wait_run(saved['analysis_run_id'],'failed')
             assert '8020' in failed['error_message']
             assert storage.media_record(record['id'])['upload_status']=='ready'

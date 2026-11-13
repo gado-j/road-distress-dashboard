@@ -124,7 +124,9 @@ def list_assets():
         run = run_map.get(m['id'])
         prediction = pred_map.get(run['id'], {}) if run and run['status'] == 'completed' else {}
         result = (run.get('raw_output') or {}) if run and run['status'] == 'completed' else {}
-        classes = [item for item in result.get('classes', []) if item['class_id'] != 0]
+        # Detection class 0 is Crack; SegFormer background is absent from saved
+        # class summaries. Never discard a class solely because its ID is zero.
+        classes = [item for item in result.get('classes', []) if item.get('label') != 'Background']
         review = review_map.get(m['id'], {})
         # This compatibility view shows one result; the schema retains all results.
         hazard = ', '.join(item['label'] for item in classes) or prediction.get('hazard_type')

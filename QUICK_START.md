@@ -1,39 +1,18 @@
-# Quick start: run the dashboard
+# Quick start: road distress dashboard
 
-This is the short daily-use guide for the existing macOS setup. For a new machine,
-complete the [first-time setup](README.md#what-you-need) first.
+Open the main project folder in VS Code, then open two terminals. These commands assume each terminal starts in that folder. Complete the [first-time setup](README.md) if either `.venv` is missing.
 
-## Before starting
-
-Open the **main project folder** in VS Code: the folder containing both
-`Attain_SegFormer_Portable` and `transportation_dashboard`. Open two new terminals
-with **Terminal → New Terminal**. Start each terminal at that main folder.
-
-You need:
-
-- Both folders' `.venv` environments already installed.
-- `Attain_SegFormer_Portable/best_model.pt`, supplied separately by the team.
-- The dashboard's ignored `.env.local` configured for your Supabase project, with
-  its tables and private buckets already created.
-- Internet access for the database and image storage.
-
-Do not recreate the database, reinstall packages, or retrain the model each time.
-
-## 1. Terminal 1 — start the model
-
-From the main project folder, run:
+## Terminal 1: YOLO model API
 
 ```bash
-cd Attain_SegFormer_Portable
+cd YOLO11s_Pavement
 source .venv/bin/activate
-python -m uvicorn practice_api:app --host 127.0.0.1 --port 8020
+python -m uvicorn api:app --host 127.0.0.1 --port 8020
 ```
 
-Wait for **Application startup complete**. Keep this terminal running.
+The supplied checkpoint belongs at `YOLO11s_Pavement/weights/best.pt`. Wait for **Application startup complete**. If an older SegFormer server already uses port 8020, stop it with Ctrl+C first. Use only one model server at a time.
 
-## 2. Terminal 2 — start the dashboard
-
-In a separate terminal, starting again at the main project folder:
+## Terminal 2: dashboard
 
 ```bash
 cd transportation_dashboard
@@ -41,89 +20,45 @@ source .venv/bin/activate
 python -m uvicorn app:app --host 127.0.0.1 --port 8010
 ```
 
-Wait for **Application startup complete**. Keep this terminal running too.
+Wait for **Application startup complete**, then open http://127.0.0.1:8010/ in your browser. Leave both terminals running. To stop, press Ctrl+C in each.
 
-If you are already inside the named folder, omit its `cd` command. Use `pwd` to
-check your current location.
+If you start inside `transportation_dashboard`, use `cd ../YOLO11s_Pavement` to reach the model folder. `pwd` shows your current directory.
 
-## 3. Open and use the dashboard
+## Upload and inspect
 
-Open **http://127.0.0.1:8010/** in your browser.
+1. Select **Upload images**, choose a JPEG, PNG, or WebP image, and click **Upload & analyze**.
+2. Open **Overview → Recent inspections**. The dashboard saves the original and queues analysis automatically.
+3. Wait for **Completed**, then open the image. Details show YOLO labels, detection counts, per-box confidence, and an image with saved boxes drawn over the original.
+4. A failed run keeps the original. Fix the cause and click **Retry analysis**. Older records can be analyzed again with YOLO from their details.
 
-1. Select **Upload images**.
-2. Choose a JPG, PNG, or WebP image.
-3. Click **Upload & analyze**.
-4. Open **Overview → Recent inspections**.
-5. Wait for the image's status to change to **Completed**.
-6. Open the image to see its saved labels and pixel coverage.
+The dashboard accepts up to ten images per upload, at most 20 MiB each. Analysis accepts at most 4 million pixels per image. It processes one image at a time. An empty detection result does not prove the pavement is free of distress.
 
-Analysis starts automatically; you do not need to click another analysis button.
-Existing older images can be processed by opening their details and selecting
-**Analyze and save**. Failed analyses offer **Retry analysis**.
-
-Limits: ten images per upload; each image at most **20 MiB** and, for analysis,
-**4 million pixels**. The model processes images one at a time. Larger originals
-can be saved but their analysis is rejected with an explanation. Keep both
-servers running until work finishes.
-
-## How the project works
+## What happens behind the scenes
 
 ```text
-Choose image and click Upload & analyze
-                ↓
-Dashboard backend saves the original in private storage
-                ↓
-Database records the image and a queued analysis run
-                ↓
-Background worker retrieves the image and calls model API :8020
-                ↓
-SegFormer resizes to 640 × 640, predicts pixel classes,
-then produces an original-size class mask
-                ↓
-Model API returns the detected classes and pixel counts
-                ↓
-Dashboard backend saves results and marks the run Completed
-                ↓
-Recent inspections, image details, and chart totals update
+Browser upload
+  → dashboard :8010 saves original in private Supabase Storage
+  → dashboard saves queued analysis run in Supabase Postgres
+  → one background worker sends original bytes to YOLO API :8020
+  → YOLO detects boxes at 960-pixel inference size, with confidence 0.10 and NMS IoU 0.50
+  → API returns labels, confidence, boxes in original-image pixel coordinates
+  → dashboard saves each detection and completes the run
+  → Recent inspections, image details, and crack chart update
 ```
 
-| Part | Role |
+The four TxDOT crack patterns remain separate from YOLO's broader **Crack**, **Patched crack**, and **Clay-patched crack** labels. YOLO does not classify severity or longitudinal/transverse direction. The ZIP's experimental index is not a validated PCI score and is not shown as road condition.
+
+The older SegFormer model remains in the project for historical results. The new YOLO API is the model used for new uploads and reanalysis.
+
+## If something fails
+
+| Symptom | Check |
 |---|---|
-| Browser interface | Uploads images and displays records/charts |
-| Dashboard FastAPI server, port 8010 | Coordinates uploads, jobs and saved results |
-| Model FastAPI server, port 8020 | Loads the trained model once and handles inference |
-| Supabase Storage | Stores original image files privately |
-| Supabase Postgres | Stores inspection records, analysis runs and predictions |
+| Dashboard cannot open | Terminal 2 is listening on 8010. |
+| Analysis fails or model cannot be reached | Terminal 1 is running `api:app` from `YOLO11s_Pavement` on 8020; then click Retry. |
+| Database unavailable | Check the dashboard's ignored `.env.local`, internet connection, and http://127.0.0.1:8010/api/health. Do not share the secret key. |
+| Address already in use | Stop the older server in its terminal before starting another on that port. |
+| Model says Not Found at `/` | Expected. Open http://127.0.0.1:8020/docs. |
+| No boxes on a visibly damaged image | Record the case for the model team; a completed run is not proof of model accuracy. |
 
-**Queued** means waiting; **Analyzing…** means processing; **Completed** means the
-model finished and results were saved. **Failed** means the original remains but
-analysis needs a retry. Refreshing the browser does not erase saved results.
-
-A background-only result is **Completed / No distress predicted**. It does not
-prove the road is distress-free. Pixel coverage is not confidence or road risk.
-Expert review is still a future feature; current predictions are unverified.
-The automatic workflow currently saves structured results, not mask/overlay files.
-
-## Stop or restart
-
-Press **Ctrl+C** in each server terminal. Run that terminal's startup command again
-to restart it. Graceful shutdown may wait for queued work; avoid force-closing it
-while jobs are active.
-
-On a later day, repeat steps 1–3. You do not need to keep VS Code running after
-stopping the servers. Start only one copy of each service.
-
-## If something goes wrong
-
-| Problem | Action |
-|---|---|
-| Browser cannot open the dashboard | Check that Terminal 2 is running on 8010. |
-| Model API unavailable / analysis failed | Start Terminal 1 on 8020, then click Retry analysis. |
-| `Address already in use` | A server is probably already running; use it or stop it in its original terminal. |
-| `.venv/bin/activate` not found | Check `pwd`; use the correct folder. If the environment is missing, follow the full README. |
-| Missing `best_model.pt` | Get the matching checkpoint from the team and place it in the model folder. |
-| Database unavailable | Check `.env.local`, internet access and http://127.0.0.1:8010/api/health. Never share the secret key. |
-| Model home page says Not Found | Expected at port 8020 `/`; its test page is http://127.0.0.1:8020/docs. |
-| Visible crack, but no distress predicted | Record the example for the model team. Running successfully does not establish accuracy. |
-
-For full setup, dependency installation and database creation, use [README.md](README.md).
+For dependency installation and Supabase setup, see [README.md](README.md). The full integration details are in [MODEL_INTEGRATION.md](transportation_dashboard/MODEL_INTEGRATION.md).

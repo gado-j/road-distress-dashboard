@@ -222,11 +222,21 @@ function openDetails(id,focusTarget,keepView=false){
  if(a.legacy_demo){results+=`<div class="demo-note"><strong>Historical demo values</strong>Hazard: ${escapeHtml(a.legacy_demo.predicted_hazard_type)}<br>Risk: ${escapeHtml(a.legacy_demo.predicted_risk_condition)}<br>Score: ${escapeHtml(a.legacy_demo.predicted_risk_score)}<br>These values were randomly assigned by the original template. They are not model predictions.</div>`;}
  if(a.model_result){
   const r=a.model_result;
-  const identified=r.classes.filter(item=>item.class_id!==0);
-  results=`<p>Attain SegFormer-B0 · ${escapeHtml(r.device)} · ${r.prediction_seconds.toFixed(3)} seconds for prediction</p>`;
-  results+=identified.length?identified.map(item=>`<div class="result-line"><strong>${escapeHtml(item.label)}</strong><span>${(item.pixel_fraction*100).toFixed(2)}% of image pixels</span></div>`).join(''):'<p>No distress pixels predicted. This does not establish that the road is distress-free.</p>';
-  results+=`<p>Pixel coverage is not confidence or a condition score. Low/High belongs to the trained class label; overall risk is not assessed. Predictions await expert review.</p>`;
-  if(r.artifacts_available!==false)results+=`<p><a class="text-link" target="_blank" rel="noopener" href="/api/analysis/${a.analysis_run_id}/overlay">Open colored overlay ↗</a> · <a class="text-link" target="_blank" rel="noopener" href="/api/analysis/${a.analysis_run_id}/mask">Open class-ID mask ↗</a></p><img src="/api/analysis/${a.analysis_run_id}/overlay" alt="Model overlay: colors identify predicted classes" style="max-width:100%;border-radius:8px">`;
+  const identified=(r.classes||[]).filter(item=>item.label!=='Background');
+  if(r.task_type==='detection'){
+   results=`<p>${escapeHtml(r.model_name)} · ${escapeHtml(r.device||'CPU')} · ${Number(r.prediction_seconds).toFixed(3)} seconds for prediction</p>`;
+   results+=identified.length?identified.map(item=>`<div class="result-line"><strong>${escapeHtml(item.label)}</strong><span>${item.detection_count} ${item.detection_count===1?'box':'boxes'}</span></div>`).join(''):'<p>No detections above the 10% confidence threshold. This does not establish that the road is distress-free.</p>';
+   results+=`<p>Boxes are model detections. Confidence is the model's detection score, not severity or overall road risk. This model does not distinguish longitudinal from transverse cracks.</p>`;
+   if((r.detections||[]).length){
+    results+=`<p><a class="text-link" target="_blank" rel="noopener" href="/api/analysis/${a.analysis_run_id}/detections-preview">Open image with detection boxes ↗</a></p><img src="/api/analysis/${a.analysis_run_id}/detections-preview" alt="Saved YOLO detections outlined on the road image" style="width:100%;border-radius:8px">`;
+    results+=r.detections.map(item=>`<div class="result-line"><span>${escapeHtml(item.label)}</span><strong>${(item.confidence*100).toFixed(1)}% confidence</strong></div>`).join('');
+   }
+  }else{
+   results=`<p>${escapeHtml(r.model_name||'Attain SegFormer-B0')} · ${escapeHtml(r.device||'unknown')} · ${Number(r.prediction_seconds).toFixed(3)} seconds for prediction</p>`;
+   results+=identified.length?identified.map(item=>`<div class="result-line"><strong>${escapeHtml(item.label)}</strong><span>${(item.pixel_fraction*100).toFixed(2)}% of image pixels</span></div>`).join(''):'<p>No distress pixels predicted. This does not establish that the road is distress-free.</p>';
+   results+=`<p>Pixel coverage is not confidence or a condition score. Low/High belongs to the trained class label; overall risk is not assessed. Predictions await expert review.</p>`;
+   if(r.artifacts_available!==false)results+=`<p><a class="text-link" target="_blank" rel="noopener" href="/api/analysis/${a.analysis_run_id}/overlay">Open colored overlay ↗</a> · <a class="text-link" target="_blank" rel="noopener" href="/api/analysis/${a.analysis_run_id}/mask">Open class-ID mask ↗</a></p><img src="/api/analysis/${a.analysis_run_id}/overlay" alt="Model overlay: colors identify predicted classes" style="max-width:100%;border-radius:8px">`;
+  }
  }
  if(a.analysis_status==='failed')results=`<p>${escapeHtml(a.analysis_error||'Analysis failed. You can retry.')}</p>`;
  const pending=['queued','processing'].includes(a.analysis_status);

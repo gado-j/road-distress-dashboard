@@ -34,8 +34,9 @@ def request_analysis(image_path):
 if __name__ == "__main__":
     image_path = (
         Path(__file__).resolve().parent.parent
-        / "Attain_SegFormer_Portable"
-        / "road2.jpg"
+        / "YOLO11s_Pavement"
+        / "samples"
+        / "Roadimage1.jpg"
     )
 
     result = request_analysis(image_path)

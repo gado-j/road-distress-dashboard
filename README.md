@@ -1,77 +1,43 @@
 # Road Distress Dashboard
 
-A local FastAPI web application for uploading pavement images, running an Attain
-SegFormer-B0 segmentation model, and reviewing saved distress predictions. The
-responsive interface supports laptops and phones. This repository distributes
-source code; it is not a hosted web service.
+A local FastAPI application for uploading road images, detecting pavement distress with a supplied YOLO11s checkpoint, and reviewing saved results. The responsive dashboard works on laptops and phones. This repository distributes source code; it is not a hosted service.
 
-Already configured? Use the **[short daily run guide](QUICK_START.md)**.
+Already configured? Use the [short daily run guide](QUICK_START.md).
 
-## Features
+## Current workflow
 
-- Private image storage and inspection records in Supabase.
-- Automatic analysis after upload: queued → analyzing → completed or failed.
-- Saved class labels, pixel counts and coverage, checkpoint fingerprint, and
-  prediction timing. Failed analyses retain the original image and can be retried.
-- Recent inspections, searchable records, original image previews and zoom.
-- Upload activity by month, quarter, or year, including zero-count periods.
-- TxDOT cracking distribution by period and label source. Upload dates are grouped
-  in America/Chicago (Central Time).
+Upload an image → save its original in private Supabase Storage → create a queued analysis run → send the image to the local YOLO API → save bounding boxes, labels and confidence in Supabase Postgres → show the result in Recent inspections, image details and charts. Failed analysis retains the original and can be retried. Older SegFormer results remain readable; reanalysis creates a new YOLO run.
 
-The current model is experimental and has missed visible cracks in local smoke
-tests. Successful execution is not evidence of predictive accuracy. Expert review
-and user authentication are not implemented yet.
+Features include searchable inspections, original-image previews, a saved detection-box preview, upload counts by month/quarter/year, and a cracking-label donut with Central Time filters. The donut keeps TxDOT's four flexible-pavement patterns distinct from broader model labels such as **Crack** and **Linear crack**.
 
-## What you need
+## Requirements
 
-1. Python **3.12**, Git, and an internet connection for initial dependencies and
-   Supabase access. Python 3.12 was tested on macOS; Windows/Linux instructions are
-   provided but have not been verified on those systems.
-2. Your own Supabase project. No project credentials or existing research records
-   are included.
-3. The compatible trained checkpoint, placed at
-   `Attain_SegFormer_Portable/best_model.pt`. **Weights are not included in this
-   source release.** Obtain them from the project team; there is currently no
-   public checkpoint download configured here. The trained weights must match the
-   included configuration and class mapping. A full end-to-end run requires them.
+- Python 3.12, Git and internet access for dependencies and Supabase. The current environments were tested on macOS; Windows/Linux packages may differ.
+- A Supabase project with the [seven application tables](transportation_dashboard/supabase/schema.sql) and two private Storage buckets.
+- The supplied YOLO checkpoint at `YOLO11s_Pavement/weights/best.pt`. Weights are **not in this repository**; obtain them from the project team. The model API verifies that the checkpoint has the expected detection task and six class names.
+- Two terminals: one for the model API on `127.0.0.1:8020`, one for the dashboard on `127.0.0.1:8010`. Both run in separate Python environments.
 
-The dashboard and model use separate Python environments. Two terminals are
-needed, one per server. The default workflow does not require a GPU; it uses CUDA
-when available and otherwise CPU. The provided code does not select Apple's MPS.
+## First-time setup
 
-## 1. Get the source
+Clone the repository:
 
 ```bash
 git clone https://github.com/gado-j/road-distress-dashboard.git
 cd road-distress-dashboard
 ```
 
-## 2. Create the model environment
-
-From the repository root:
+Create the YOLO environment from the repository root:
 
 ```bash
-cd Attain_SegFormer_Portable
+cd YOLO11s_Pavement
 python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements-lock.txt
 ```
 
-On Windows PowerShell use `py -3.12 -m venv .venv` and
-`.\.venv\Scripts\Activate.ps1` in place of the two environment commands.
+The lockfile records the tested macOS environment. On another platform, use `requirements.txt` if locked wheels are unavailable. Place the compatible `best.pt` in `weights/`. On Windows PowerShell, create the environment with `py -3.12 -m venv .venv` and activate with `.\.venv\Scripts\Activate.ps1`.
 
-`requirements-lock.txt` records the tested model/API environment. PyTorch wheel
-availability depends on the operating system; if that lock cannot be installed,
-use the supplied `requirements.txt` with a compatible PyTorch/torchvision build,
-then install `fastapi`, `uvicorn`, and `python-multipart` for the HTTP service.
-Record any alternative environment used for reproducing results.
-
-Keep `best_model.pt`, `config.json`, and `class_mapping.json` beside `inference.py`.
-Do not replace the architecture or label IDs with an unrelated checkpoint.
-
-## 3. Create the dashboard environment
-
-In another terminal, starting at the repository root:
+Create the dashboard environment in a second terminal:
 
 ```bash
 cd transportation_dashboard
@@ -80,176 +46,74 @@ source .venv/bin/activate
 python -m pip install -r requirements-lock.txt
 ```
 
-Windows uses the activation commands described above. Install model packages only
-in the model environment, not in the dashboard environment.
+Model packages belong in the YOLO environment; the dashboard environment only needs its own lockfile.
 
-## 4. Configure Supabase
+### Supabase setup
 
-1. Create a Supabase project.
-2. On a **new, empty project**, run
-   [`transportation_dashboard/supabase/schema.sql`](transportation_dashboard/supabase/schema.sql)
-   in its SQL editor. Do not rerun this initial schema on an existing configured
-   database. It creates the seven application tables and backend-only access.
-3. Create two **private** Storage buckets named `inspection-media` and
-   `analysis-artifacts`. Do not enable public access.
-4. Copy the dashboard's environment example:
+For a **new, empty** Supabase project, run [`transportation_dashboard/supabase/schema.sql`](transportation_dashboard/supabase/schema.sql) once in the SQL editor. Do not rerun it in an existing configured database. Create two **private** buckets named `inspection-media` and `analysis-artifacts`.
 
-   ```bash
-   cp .env.example .env.local
-   ```
+Inside `transportation_dashboard`, copy `.env.example` to `.env.local` and set your own project URL and backend secret:
 
-   On Windows PowerShell: `Copy-Item .env.example .env.local`.
-5. Edit `.env.local` locally:
-
-   ```ini
-   SUPABASE_URL=https://YOUR-PROJECT-REF.supabase.co
-   SUPABASE_SECRET_KEY=YOUR_BACKEND_SECRET
-   SUPABASE_MEDIA_BUCKET=inspection-media
-   SUPABASE_ARTIFACTS_BUCKET=analysis-artifacts
-   ```
-
-Use a backend secret/service-role credential for your own project. Never put it in
-browser JavaScript, commit it, or share it in screenshots. `.env.local` is ignored
-by Git. See the [database notes](transportation_dashboard/supabase/README.md).
-
-## 5. Run both servers
-
-**Terminal 1 — model**, with the model environment activated:
-
-```bash
-cd Attain_SegFormer_Portable  # if starting from the repository root
-python -m uvicorn practice_api:app --host 127.0.0.1 --port 8020
+```ini
+SUPABASE_URL=https://YOUR-PROJECT-REF.supabase.co
+SUPABASE_SECRET_KEY=YOUR_BACKEND_SECRET
+SUPABASE_MEDIA_BUCKET=inspection-media
+SUPABASE_ARTIFACTS_BUCKET=analysis-artifacts
 ```
 
-If the terminal is already inside that folder, omit the `cd`. Wait for
-`Application startup complete`.
+Keep `.env.local` on the backend and out of Git and screenshots. See the [database notes](transportation_dashboard/supabase/README.md). The existing Supabase project requires **no new migration** for YOLO.
 
-**Terminal 2 — dashboard**, with the dashboard environment activated:
+## Run
+
+In the YOLO folder with its environment active:
 
 ```bash
-cd transportation_dashboard  # if starting from the repository root
+python -m uvicorn api:app --host 127.0.0.1 --port 8020
+```
+
+In the dashboard folder with its environment active:
+
+```bash
 python -m uvicorn app:app --host 127.0.0.1 --port 8010
 ```
 
-Open:
+Open http://127.0.0.1:8010/. The dashboard API is at `/docs`, its storage check at `/api/health`, and the YOLO API at http://127.0.0.1:8020/docs. The model API's `/` returning Not Found is expected. Keep both servers running; stop each with Ctrl+C. If an older SegFormer server occupies port 8020, stop it before starting YOLO. Run only one dashboard worker because its analysis queue is local to the process. Keep both services bound to `127.0.0.1` until authentication is added.
 
-| Address | Purpose |
-|---|---|
-| http://127.0.0.1:8010/ | Dashboard |
-| http://127.0.0.1:8010/docs | Dashboard API docs |
-| http://127.0.0.1:8010/api/health | Database and private-bucket connection check |
-| http://127.0.0.1:8020/docs | Model API test page |
+## Use and interpretation
 
-The model service has no page at `/`; use `/docs`. Keep both terminals running.
-Stop each with **Ctrl+C**. Restart the model service after editing model/API code.
-For dashboard development, `--reload` can be added to its startup command.
-Refresh the browser after changing frontend files.
+Choose **Upload images**, select up to ten JPEG/PNG/WebP files, and click **Upload & analyze**. Each file can be at most 20 MiB; analysis accepts at most 4 million pixels. New images are queued automatically. Open **Recent inspections** to see status and the saved result. If analysis fails, click **Retry analysis** in the image details. Older records can be reanalyzed with YOLO from the same details.
 
-**Local use only:** keep `127.0.0.1` and use one dashboard Uvicorn worker. The
-current app is not ready for public hosting or unauthenticated network access.
+YOLO uses a 960-pixel inference size, confidence threshold 0.10 and NMS IoU 0.50. It returns boxes in original-image pixel coordinates. Its checkpoint labels are:
 
-## 6. Upload and inspect
+| ID | Label |
+|---:|---|
+| 0 | Crack |
+| 1 | Pothole |
+| 2 | Patched crack |
+| 3 | Patched pothole |
+| 4 | Clay-patched crack |
+| 5 | Manhole |
 
-1. Select **Upload images**, choose an image, and click **Upload & analyze**.
-2. Open **Overview → Recent inspections**. Processing starts automatically.
-3. Open the image to see saved predictions and pixel coverage.
-4. If processing fails, retain the original and use **Retry analysis** after
-   correcting the issue (for example, starting port 8020).
+**Crack** has no longitudinal/transverse direction or severity. Bounding-box confidence is not road risk or crack severity. A completed run with zero detections does not establish healthy pavement. The supplied experimental inverse-box score is **not a validated PCI score** and is not used as road condition in the dashboard. Expert review and authenticated public hosting remain future work.
 
-Limits: up to ten JPEG/PNG/WebP files per upload, each at most **20 MiB**. Model
-analysis additionally requires at most **4 million original pixels**. Larger
-images can be saved but will receive a failed analysis with a clear explanation.
-The model resizes to **640 × 640** internally and forms an original-size mask.
-Automatic tiling/video inference is not included.
+The team reported validation precision **58.32%**, recall **72.67%**, mAP@50 **63.45%**, and mAP@50:95 **50.21%**. These are reported values from the supplied package; the ZIP lacks the full evaluation data and script needed to reproduce them independently. See [model notes](YOLO11s_Pavement/README.md).
 
-[Sample-input notes](samples/README.md) explain how to create a small synthetic
-image for a smoke test. For actual distress tests, use approved road imagery.
+## Tests
 
-## Interpretation and current limitations
-
-| ID | Model class |
-|---|---|
-| 0 | Background |
-| 1 | Alligator crack - Low |
-| 2 | Block crack - Low |
-| 3 | Faded marking - High |
-| 4 | Faded marking - Low |
-| 5 | Linear crack - High |
-| 6 | Linear crack - Low |
-| 7 | Pothole - Low |
-
-- Background-only output is **Completed / No distress predicted**, not proof of
-  healthy pavement.
-- Pixel coverage is not confidence, calibrated physical area, severity validation,
-  a condition score, or overall road risk. Low/High is preserved as part of the
-  trained class name. Overall risk and confidence are not invented.
-- The model does not distinguish longitudinal and transverse cracking. Its broader
-  Linear crack label is left unmapped in the four-category TxDOT donut.
-- Donut categories follow the flexible-pavement cracking terminology in the
-  [TxDOT FY2024 PMIS Pavement Rater's Manual](https://ftp.txdot.gov/pub/txdot/mnt/crossroads/pmis/pmis-fy2024-visual-raters-manual.pdf).
-  Multi-label images can contribute once to each type; percentages are shares of
-  crack labels, not unique images or road area.
-- The automatic HTTP path saves structured results, not mask/overlay artifacts.
-  Standalone visualization scripts can produce those files locally.
-- Authentication, expert annotation, video prediction, distributed workers, and
-  hosted deployment are future work. Queued state is persisted, but execution uses
-  one local worker. Restart recovery resumes queued work and marks interrupted
-  processing runs failed for retry.
-- Legacy logistics routes remain in the backend for compatibility; they are not
-  used by the road-distress interface and are not predictive-maintenance models.
-
-## Reproduction and tests
-
-With the model environment active, and a local image `example.jpg`:
+With the YOLO server running and the dashboard's Supabase connection configured, run from `transportation_dashboard`:
 
 ```bash
-python inference.py --image example.jpg --output example_mask.png
-python visualize_mask.py --image example.jpg --mask example_mask.png --output example_overlay.png
-python benchmark_inference.py --image example.jpg --runs 5
+.venv/bin/python tests/check_model_integration.py
+.venv/bin/python tests/check_supabase_integration.py
 ```
 
-These commands run from `Attain_SegFormer_Portable`. Use new output names to avoid
-replacing earlier results. The raw mask contains class IDs and may appear black.
-
-From the dashboard folder/environment:
-
-```bash
-python tests/check_supabase_integration.py
-```
-
-This explicitly creates and removes its own temporary test upload in your
-configured Supabase project. Full model integration testing is documented in
-[MODEL_INTEGRATION.md](transportation_dashboard/MODEL_INTEGRATION.md); its existing
-smoke script also requires local `road.jpg` and `road2.jpg` fixtures not distributed
-here. Do not interpret smoke tests as an accuracy benchmark.
-
-## Troubleshooting
-
-| Problem | Check |
-|---|---|
-| `python` or a module is missing | Activate the correct folder's `.venv`; install its requirements. |
-| Missing `best_model.pt` | Obtain the matching checkpoint from the project team. |
-| Model API unavailable | Start the model service on port 8020, then retry the image. |
-| Database/storage unavailable | Check your `.env.local`, network access, schema and private buckets. |
-| Address already in use | An earlier server may still be running; stop it before restarting. |
-| File not found | Use the actual image filename/extension and correct working folder. |
-| Analysis rejected | Check 20 MiB / 4-million-pixel limits and supported image format. |
-| Empty donut | No saved mapped crack labels exist in the selected period/source. |
-| Bad prediction | Record the image, checkpoint and output for the model team; do not relabel it as a correct result. |
+The model integration test uses a local sample supplied in the ZIP at `YOLO11s_Pavement/samples/Roadimage1.jpg`; it creates and removes temporary test records. It checks detection results, empty results, saved geometry/confidence, previews, failure/retry and duplicate requests. See [integration details](transportation_dashboard/MODEL_INTEGRATION.md). Successful execution is not an accuracy benchmark.
 
 ## Repository contents
 
-- `transportation_dashboard/`: backend, frontend, schema, environment example and tests.
-- `Attain_SegFormer_Portable/`: model configuration, inference/API code and visualization tools.
-- `samples/`: instructions for small, approved smoke-test inputs.
+- `YOLO11s_Pavement/`: YOLO API, dependency files, original scoring script and recorded metric notes. Checkpoint and sample photos are local only.
+- `transportation_dashboard/`: FastAPI backend, interface, schema and tests.
+- `Attain_SegFormer_Portable/`: older segmentation model code for historical results and separate research use. Its checkpoint is also local only.
+- `QUICK_START.md`: daily run commands and workflow.
 
-Credentials, Python environments, datasets, original research documents, reference
-projects, generated outputs and model weights are excluded from Git.
-
-## License and model availability
-
-A software license and a public model-weight distribution location have not yet
-been selected by the project team. No redistribution license for third-party data
-or weights is implied. Before describing this as a freely reusable open-source
-release, select and add the approved software license and state the checkpoint's
-availability separately.
+Credentials, Python environments, datasets, original research documents, generated outputs, and model weights are excluded from Git. A software license and public model-weight distribution location have not yet been selected by the team; source availability does not imply permission to redistribute third-party data or checkpoints.

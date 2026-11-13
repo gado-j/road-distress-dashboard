@@ -1,26 +1,32 @@
 'use strict';
-// TxDOT FY2024 flexible-pavement cracking categories. Never infer orientation
-// from the model's broader "Linear crack" label or from an image filename.
+// Four TxDOT FY2024 flexible-pavement cracking categories plus broader model
+// labels. Neither Linear nor Crack implies longitudinal or transverse.
 const crackingCategories = [
  {label:'Block Cracking', color:'#008d94'},
  {label:'Alligator Cracking', color:'#8bb395'},
  {label:'Longitudinal Cracking', color:'#edae3b'},
- {label:'Transverse Cracking', color:'#5279aa'}
+ {label:'Transverse Cracking', color:'#5279aa'},
+ {label:'Linear cracking — unspecified direction', color:'#9270b5'},
+ {label:'Crack — unspecified pattern', color:'#c7789b'},
+ {label:'Patched crack', color:'#887d63'},
+ {label:'Clay-patched crack', color:'#ba7951'}
 ];
 function txdotCrack(label) {
  const clean = String(label || '').trim().toLowerCase().replace(/\s*-\s*(low|medium|high)$/, '');
  return {'block crack':0,'block cracking':0,'alligator crack':1,'alligator cracking':1,
-         'longitudinal crack':2,'longitudinal cracking':2,'transverse crack':3,'transverse cracking':3}[clean];
+         'longitudinal crack':2,'longitudinal cracking':2,'transverse crack':3,'transverse cracking':3,
+         'linear crack':4,'linear cracking':4,'crack':5,
+         'patched crack':6,'clay-patched crack':7}[clean];
 }
 function crackingSummary(records, source) {
- const counts = [0,0,0,0];
+ const counts = crackingCategories.map(()=>0);
  let unassessed=0, unmapped=0, other=0, matchedImages=0;
  for (const a of records) {
   let labels;
   if (source==='demo') labels=a.legacy_demo?[a.legacy_demo.predicted_hazard_type]:null;
   else if (source==='expert') labels=a.expert_annotated?[a.expert_hazard_type].filter(Boolean):null;
   else if (a.analysis_status!=='completed') labels=null;
-  else if (a.model_result) labels=(a.model_result.classes || []).filter(c=>c.class_id!==0).map(c=>c.label);
+  else if (a.model_result) labels=(a.model_result.classes || []).filter(c=>c.label!=='Background').map(c=>c.label);
   else labels=a.predicted_hazard_type && a.predicted_hazard_type!=='No distress predicted'?[a.predicted_hazard_type]:[];
   if (labels===null) {unassessed++;continue;}
   // Count each recognized type once per image, not once per pixel/object.
@@ -63,5 +69,5 @@ function renderCrackingChart(records) {
  document.querySelector('#crackEmpty').textContent=source==='demo'?'No demo cracking labels in this period.':source==='expert'?'No mapped expert cracking labels in this period.':'No saved predictions for these cracking categories. Unsaved previews are not counted.';
  document.querySelector('#crackSourceNote').textContent=source==='demo'?'Historical demo labels · not model predictions':source==='expert'?'Saved expert assessments':'Saved model predictions';
  document.querySelector('#crackCounts').textContent=`${summary.matchedImages} images with mapped cracks · ${summary.unassessed} without a ${source==='demo'?'demo label':source==='expert'?'review':'saved analysis'} · ${summary.unmapped} with unmapped crack labels · ${summary.other} with other distress`;
- document.querySelector('#crackMappingNote').textContent=summary.unmapped?'“Linear crack” stays unmapped: this model does not distinguish longitudinal from transverse.':'Each cracking type is counted once per image. An image can contribute to more than one type.';
+ document.querySelector('#crackMappingNote').textContent='The four TxDOT types are shown alongside distinct model labels. Linear and generic Crack have unspecified direction or pattern. Each type is counted once per image.';
 }

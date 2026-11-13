@@ -54,8 +54,43 @@ function renderUploadChart(records) {
   const visibleLabels = buckets.map((_,i)=>i).filter(i=>i%labelStep===0 || i===buckets.length-1);
   // Keep the last label, but suppress a nearby penultimate label.
   if(visibleLabels.length>2 && x(visibleLabels.at(-1))-x(visibleLabels.at(-2))<70) visibleLabels.splice(-2,1);
-  const marks = buckets.map((b, i) => `<circle cx="${x(i)}" cy="${y(b.count)}" r="4"><title>${b.label}: ${b.count} uploads</title></circle>${visibleLabels.includes(i) ? `<text x="${x(i)}" y="235" text-anchor="${i === 0 ? 'start' : i === buckets.length - 1 ? 'end' : 'middle'}">${b.label}</text>` : ''}`).join('');
-  document.querySelector('#uploadChart').innerHTML = `<svg viewBox="0 0 ${width} 260" role="img" aria-labelledby="uploadChartTitle uploadChartDescription"><title id="uploadChartTitle">Uploads by ${mode}</title><desc id="uploadChartDescription">${buckets.map(b => `${b.label}: ${b.count}`).join('; ')}</desc>${gradient}${grid}${area}<polyline points="${points}"/>${marks}</svg>`;
+  const marks = buckets.map((b, i) => `<circle cx="${x(i)}" cy="${y(b.count)}" r="4"/>${visibleLabels.includes(i) ? `<text x="${x(i)}" y="235" text-anchor="${i === 0 ? 'start' : i === buckets.length - 1 ? 'end' : 'middle'}">${b.label}</text>` : ''}`).join('');
+  // Full-height targets make every period easy to hover, including zero counts.
+  const targets = buckets.map((b, i) => {
+    const left = i === 0 ? 32 : (x(i - 1) + x(i)) / 2;
+    const end = i === buckets.length - 1 ? width - 14 : (x(i) + x(i + 1)) / 2;
+    return `<rect class="upload-hit" data-index="${i}" x="${left}" y="28" width="${end-left}" height="188" tabindex="0" role="button" aria-label="${b.label}: ${b.count} ${b.count===1?'upload':'uploads'}"/>`;
+  }).join('');
+  const chart = document.querySelector('#uploadChart');
+  chart.innerHTML = `<svg viewBox="0 0 ${width} 260" role="group" aria-labelledby="uploadChartTitle uploadChartDescription"><title id="uploadChartTitle">Uploads by ${mode}</title><desc id="uploadChartDescription">Hover, tap, or focus a period to see its upload count. ${buckets.map(b => `${b.label}: ${b.count}`).join('; ')}</desc>${gradient}${grid}${area}<polyline points="${points}"/>${marks}${targets}<g class="upload-tooltip" visibility="hidden" pointer-events="none"><line class="upload-guide" y1="28" y2="210"/><circle class="upload-active" r="6"/><g class="upload-tooltip-box"><rect width="132" height="49" rx="7"/><text class="upload-tooltip-period" x="12" y="19"></text><text class="upload-tooltip-count" x="12" y="37"></text></g></g></svg>`;
+  const tooltip = chart.querySelector('.upload-tooltip');
+  const show = index => {
+    const bucket = buckets[index];
+    const px = x(index), py = y(bucket.count);
+    const boxX = Math.max(4, Math.min(width - 136, px - 66));
+    const boxY = py < 88 ? py + 14 : py - 63;
+    tooltip.setAttribute('visibility', 'visible');
+    const guide = tooltip.querySelector('.upload-guide');
+    guide.setAttribute('x1', px); guide.setAttribute('x2', px);
+    const marker = tooltip.querySelector('.upload-active');
+    marker.setAttribute('cx', px); marker.setAttribute('cy', py);
+    tooltip.querySelector('.upload-tooltip-box').setAttribute('transform', `translate(${boxX} ${boxY})`);
+    tooltip.querySelector('.upload-tooltip-period').textContent = bucket.label;
+    tooltip.querySelector('.upload-tooltip-count').textContent = `${bucket.count} ${bucket.count === 1 ? 'upload' : 'uploads'}`;
+  };
+  const hide = () => tooltip.setAttribute('visibility', 'hidden');
+  chart.querySelectorAll('.upload-hit').forEach(target => {
+    const reveal = () => show(Number(target.dataset.index));
+    target.addEventListener('pointerenter', reveal);
+    target.addEventListener('focus', reveal);
+    target.addEventListener('click', reveal);
+    target.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') {event.preventDefault(); reveal();}
+    });
+  });
+  chart.onpointerleave = () => {if (!chart.contains(document.activeElement)) hide();};
+  chart.onfocusout = event => {if (!chart.contains(event.relatedTarget)) hide();};
+  chart.onkeydown = event => {if (event.key === 'Escape') hide();};
   document.querySelector('#uploadChartSummary').textContent = `${total} images · ${buckets[0].label} – ${buckets[buckets.length - 1].label}`;
   document.querySelector('#uploadChartTable').innerHTML = `<table><caption>Upload counts by ${mode}</caption><thead><tr><th>Period</th><th>Images</th></tr></thead><tbody>${buckets.map(b => `<tr><td>${b.label}</td><td>${b.count}</td></tr>`).join('')}</tbody></table>`;
 }
