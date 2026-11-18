@@ -8,6 +8,8 @@ Already configured? Use the [short daily run guide](QUICK_START.md).
 
 Upload an image → save its original in private Supabase Storage → create a queued analysis run → send the image to the local YOLO API → save bounding boxes, labels and confidence in Supabase Postgres → show the result in Recent inspections, image details and charts. Failed analysis retains the original and can be retried. Older SegFormer results remain readable; reanalysis creates a new YOLO run.
 
+The **Reports** page filters completed analyses by completion date in Central Time. It opens a printable report with each image's latest saved result, original, and annotated model output. Use the browser's **Save as PDF** print destination to export it.
+
 Features include searchable inspections, original-image previews, a saved detection-box preview, upload counts by month/quarter/year, and a cracking-label donut with Central Time filters. The donut keeps TxDOT's four flexible-pavement patterns distinct from broader model labels such as **Crack** and **Linear crack**.
 
 ## Requirements

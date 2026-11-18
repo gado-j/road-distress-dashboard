@@ -31,6 +31,10 @@ If you start inside `transportation_dashboard`, use `cd ../YOLO11s_Pavement` to 
 3. Wait for **Completed**, then open the image. Details show YOLO labels, detection counts, per-box confidence, and an image with saved boxes drawn over the original.
 4. A failed run keeps the original. Fix the cause and click **Retry analysis**. Older records can be analyzed again with YOLO from their details.
 
+## Export analyzed results
+
+Open **Reports** in the sidebar, choose the dates when analysis completed, and select **Open report**. The new tab shows each image's latest saved completed run in that period, its original, annotated result, and model labels. Select **Print / Save as PDF** and choose **Save as PDF** in the browser print dialog. Dates use Central Time. The date range can span up to one year; if it contains more than 200 completed runs, choose a shorter range. The report excludes pending, failed, and unsaved preview results.
+
 The dashboard accepts up to ten images per upload, at most 20 MiB each. Analysis accepts at most 4 million pixels per image. It processes one image at a time. An empty detection result does not prove the pavement is free of distress.
 
 ## What happens behind the scenes

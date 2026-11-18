@@ -41,9 +41,23 @@ function imageReference(asset) {
  return `IMG-${stamp}-${asset.id.split('-')[0].toUpperCase()}`;
 }
 const thumb = a => `<img class="thumb" src="${escapeHtml(a.url)}" alt="" loading="lazy">`;
-function pageName(){const p=location.hash.slice(1);return ['overview','inspections','upload'].includes(p)?p:'overview';}
-function navigate(){const page=pageName();document.querySelectorAll('.page').forEach(el=>el.hidden=el.id!==`${page}Page`);document.querySelectorAll('nav [data-page]').forEach(el=>{const active=el.dataset.page===page;el.classList.toggle('active',active);if(active)el.setAttribute('aria-current','page');else el.removeAttribute('aria-current');});$('#breadcrumbPage').textContent={overview:'Overview',inspections:'Inspections',upload:'Upload images'}[page];document.title=`${$('#breadcrumbPage').textContent} · Road distress dashboard`;window.scrollTo(0,0);if(page==='overview'&&loaded){renderUploadChart(assets);renderCrackingChart(assets);}}
+function pageName(){const p=location.hash.slice(1);return ['overview','inspections','upload','reports'].includes(p)?p:'overview';}
+function navigate(){const page=pageName();document.querySelectorAll('.page').forEach(el=>el.hidden=el.id!==`${page}Page`);document.querySelectorAll('nav [data-page]').forEach(el=>{const active=el.dataset.page===page;el.classList.toggle('active',active);if(active)el.setAttribute('aria-current','page');else el.removeAttribute('aria-current');});$('#breadcrumbPage').textContent={overview:'Overview',inspections:'Inspections',upload:'Upload images',reports:'Reports'}[page];document.title=`${$('#breadcrumbPage').textContent} · Road distress dashboard`;window.scrollTo(0,0);if(page==='overview'&&loaded){renderUploadChart(assets);renderCrackingChart(assets);}}
 window.addEventListener('hashchange',navigate);navigate();
+function centralDate(date){
+ const parts=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:'America/Chicago',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(date).map(p=>[p.type,p.value]));
+ return `${parts.year}-${parts.month}-${parts.day}`;
+}
+$('#reportTo').value=centralDate(new Date());
+$('#reportFrom').value=centralDate(new Date(Date.now()-29*86400000));
+$('#reportForm').addEventListener('submit',event=>{
+ event.preventDefault();
+ const start=$('#reportFrom').value,end=$('#reportTo').value,status=$('#reportStatus');
+ if(!start||!end||end<start){status.textContent='Choose a valid start and end date.';return;}
+ const url=`/api/reports/analysis?from_date=${encodeURIComponent(start)}&to_date=${encodeURIComponent(end)}`;
+ status.textContent='Opening the printable report in a new tab…';
+ window.open(url,'_blank','noopener');
+});
 function error(message){$('#pageError').hidden=!message;$('#pageError').textContent=message||'';}
 async function refresh() {
   // Prevent two requests from running at the same time.

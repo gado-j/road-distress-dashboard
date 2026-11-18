@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Literal
 import re
@@ -14,7 +14,7 @@ from starlette.concurrency import run_in_threadpool
 import storage_backend as storage
 
 from fastapi import FastAPI, File, UploadFile, HTTPException, Request
-from fastapi.responses import FileResponse, RedirectResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, RedirectResponse, JSONResponse, Response, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -130,6 +130,19 @@ def assets():
         return {"assets": rows, "count": len(rows), "source": "supabase"}
     except Exception:
         raise HTTPException(503, "Could not load inspection records from Supabase.")
+
+
+@app.get('/api/reports/analysis', response_class=HTMLResponse)
+def analysis_report(from_date: date, to_date: date):
+    """Printable report of completed runs, filtered by completion day in Texas time."""
+    import analysis_report as report
+    try:
+        runs = report.completed_runs(from_date, to_date)
+        return HTMLResponse(report.render(from_date, to_date, runs))
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    except Exception:
+        raise HTTPException(503, 'Could not generate the analysis report from saved records.')
 
 @app.post("/api/upload-images")
 async def upload_images(files: list[UploadFile] = File(...)):
