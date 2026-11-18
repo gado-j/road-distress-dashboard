@@ -10,7 +10,7 @@ Upload an image → save its original in private Supabase Storage → create a q
 
 The **Reports** page filters completed analyses by completion date in Central Time. It opens a printable report with each image's latest saved result, original, and annotated model output. Use the browser's **Save as PDF** print destination to export it.
 
-Features include searchable inspections, original-image previews, a saved detection-box preview, upload counts by month/quarter/year, and a cracking-label donut with Central Time filters. The donut keeps TxDOT's four flexible-pavement patterns distinct from broader model labels such as **Crack** and **Linear crack**.
+Features include searchable inspections, original-image previews, a saved detection-box preview, upload counts by month/quarter/year, and a cracking-label donut with Central Time filters. Upload accepts multiple direct images or a ZIP archive; non-image and invalid entries are skipped, while valid images follow the usual analysis pipeline. The donut keeps TxDOT's four flexible-pavement patterns distinct from broader model labels such as **Crack** and **Linear crack**.
 
 ## Requirements
 

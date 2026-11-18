@@ -290,21 +290,34 @@ $('#zoomButton').addEventListener('click',toggleZoom);$('#detailImage').addEvent
 $('#deleteImage').addEventListener('click',async()=>{const a=assets.find(a=>a.id===selectedId);if(!a||!confirm(`Delete ${a.name}? This removes its original image and upload record.`))return;$('#deleteImage').disabled=true;try{const response=await fetch(`/api/assets/${a.id}`,{method:'DELETE'});const data=await response.json();if(!response.ok)throw new Error(data.detail||'Could not delete image.');$('#detailsDialog').close();await refresh();}catch(e){$('#detailStatus').textContent=e.message;$('#deleteImage').disabled=false;}});
 function addFiles(incoming){
  if(uploading)return;const messages=[];
- for(const f of incoming){if(!['image/jpeg','image/png','image/webp'].includes(f.type)){messages.push(`${f.name}: use JPEG, PNG, or WebP.`);continue;}if(f.size>20*1024*1024){messages.push(`${f.name}: exceeds 20 MB.`);continue;}if(files.some(x=>x.file.name===f.name&&x.file.size===f.size&&x.file.lastModified===f.lastModified))continue;if(files.length>=10){messages.push('Select up to 10 images per upload.');break;}files.push({file:f,url:URL.createObjectURL(f)});}
+ for(const f of incoming){
+  const isZip=/\.zip$/i.test(f.name);
+  if(isZip){
+   if(files.length||incoming.length!==1){messages.push('Select one ZIP archive by itself.');continue;}
+   if(f.size>100*1024*1024){messages.push(`${f.name}: ZIP exceeds 100 MB.`);continue;}
+   files.push({file:f,url:null,isZip:true});continue;
+  }
+  if(!['image/jpeg','image/png','image/webp'].includes(f.type)){messages.push(`${f.name}: use JPEG, PNG, WebP, or a ZIP archive.`);continue;}
+  if(files.some(x=>x.isZip)){messages.push('Select the ZIP archive by itself.');continue;}
+  if(f.size>20*1024*1024){messages.push(`${f.name}: exceeds 20 MB.`);continue;}
+  if(files.some(x=>x.file.name===f.name&&x.file.size===f.size&&x.file.lastModified===f.lastModified))continue;
+  if(files.length>=10){messages.push('Select up to 10 images per upload.');break;}
+  files.push({file:f,url:URL.createObjectURL(f),isZip:false});
+ }
  $('#uploadStatus').textContent=messages.join('\n');$('#uploadStatus').classList.toggle('error',!!messages.length);renderSelection();
 }
-function renderSelection(){$('#selectionPanel').hidden=!files.length;$('#selectionCount').textContent=files.length;$('#uploadButton').disabled=!files.length||uploading;$('#clearFiles').disabled=uploading;$('#imageInput').disabled=uploading;$('#selectedFiles').innerHTML=files.map((f,i)=>`<div class="selected-file"><img class="thumb" src="${f.url}" alt=""><div><span class="file-title">${escapeHtml(f.file.name)}</span><span class="file-sub">${byteText(f.file.size)}</span></div><button class="remove-file" data-remove="${i}" aria-label="Remove ${escapeHtml(f.file.name)}" ${uploading?'disabled':''}>×</button></div>`).join('');}
+function renderSelection(){$('#selectionPanel').hidden=!files.length;$('#selectionCount').textContent=files.length;$('#uploadButton').disabled=!files.length||uploading;$('#clearFiles').disabled=uploading;$('#imageInput').disabled=uploading;$('#selectedFiles').innerHTML=files.map((f,i)=>`<div class="selected-file">${f.isZip?'<span class="zip-symbol" aria-hidden="true">ZIP</span>':`<img class="thumb" src="${f.url}" alt="">`}<div><span class="file-title">${escapeHtml(f.file.name)}</span><span class="file-sub">${byteText(f.file.size)}</span></div><button class="remove-file" data-remove="${i}" aria-label="Remove ${escapeHtml(f.file.name)}" ${uploading?'disabled':''}>×</button></div>`).join('');}
 $('#imageInput').addEventListener('change',e=>{addFiles([...e.target.files]);e.target.value='';});
-$('#clearFiles').addEventListener('click',()=>{files.forEach(f=>URL.revokeObjectURL(f.url));files=[];renderSelection();$('#uploadStatus').textContent='';});
-$('#selectedFiles').addEventListener('click',e=>{const b=e.target.closest('[data-remove]');if(b&&!uploading){const [f]=files.splice(Number(b.dataset.remove),1);URL.revokeObjectURL(f.url);renderSelection();}});
+$('#clearFiles').addEventListener('click',()=>{files.forEach(f=>{if(f.url)URL.revokeObjectURL(f.url);});files=[];renderSelection();$('#uploadStatus').textContent='';});
+$('#selectedFiles').addEventListener('click',e=>{const b=e.target.closest('[data-remove]');if(b&&!uploading){const [f]=files.splice(Number(b.dataset.remove),1);if(f.url)URL.revokeObjectURL(f.url);renderSelection();}});
 ['dragenter','dragover'].forEach(type=>$('#dropZone').addEventListener(type,e=>{e.preventDefault();if(!uploading)$('#dropZone').classList.add('dragging');}));
 ['dragleave','drop'].forEach(type=>$('#dropZone').addEventListener(type,e=>{e.preventDefault();$('#dropZone').classList.remove('dragging');if(type==='drop')addFiles([...e.dataTransfer.files]);}));
 $('#uploadButton').addEventListener('click',()=>{
- if(uploading||!files.length)return;uploading=true;renderSelection();$('#uploadProgress').hidden=false;$('#progressBar').value=0;$('#progressLabel').textContent='Sending images…';$('#uploadStatus').textContent='';$('#uploadStatus').classList.remove('error');
- const data=new FormData();files.forEach(f=>data.append('files',f.file));const xhr=new XMLHttpRequest();xhr.open('POST','/api/upload-images');xhr.timeout=180000;
+ if(uploading||!files.length)return;uploading=true;renderSelection();$('#uploadProgress').hidden=false;$('#progressBar').value=0;$('#progressLabel').textContent=files[0].isZip?'Sending ZIP archive…':'Sending images…';$('#uploadStatus').textContent='';$('#uploadStatus').classList.remove('error');
+ const isZip=files[0].isZip;const data=new FormData();files.forEach(f=>data.append(isZip?'file':'files',f.file));const xhr=new XMLHttpRequest();xhr.open('POST',isZip?'/api/upload-zip':'/api/upload-images');xhr.timeout=300000;
  xhr.upload.onprogress=e=>{if(e.lengthComputable){$('#progressBar').value=e.loaded/e.total*90;$('#progressLabel').textContent=e.loaded===e.total?'Saving images to private storage…':`Sending images · ${Math.round(e.loaded/e.total*100)}%`;}};
  const finish=()=>{uploading=false;$('#uploadProgress').hidden=true;renderSelection();};
- xhr.onload=async()=>{try{const result=JSON.parse(xhr.responseText);if(xhr.status>=400)throw new Error(result.errors?.map(e=>`${e.name}: ${e.error}`).join('\n')||result.detail||'Upload failed.');const savedNames={};result.saved.forEach(r=>savedNames[r.name]=(savedNames[r.name]||0)+1);files=files.filter(f=>{if(savedNames[f.file.name]){savedNames[f.file.name]--;URL.revokeObjectURL(f.url);return false;}return true;});$('#uploadStatus').innerHTML=`${result.count} ${result.count===1?'image saved':'images saved'}. Analysis starts automatically. Results will appear in Recent inspections. <a class="text-link" href="#overview">View recent inspections →</a>${result.analysis_errors?.length?`<br>${result.analysis_errors.map(e=>escapeHtml(`${e.name}: ${e.error}`)).join('<br>')}`:''}${result.errors?.length?`<br>${result.errors.map(e=>escapeHtml(`${e.name}: ${e.error}`)).join('<br>')}`:''}`;$('#uploadStatus').classList.toggle('error',!!(result.errors?.length||result.analysis_errors?.length));await refresh();}catch(e){$('#uploadStatus').textContent=e.message;$('#uploadStatus').classList.add('error');}finally{finish();}};
+ xhr.onload=async()=>{try{const result=JSON.parse(xhr.responseText);if(xhr.status>=400)throw new Error(result.errors?.map(e=>`${e.name}: ${e.error}`).join('\n')||result.detail||`${result.skipped_count||0} ZIP entries skipped; no valid images saved.`);const savedNames={};result.saved.forEach(r=>savedNames[r.name]=(savedNames[r.name]||0)+1);files=files.filter(f=>{if(isZip){return false;}if(savedNames[f.file.name]){savedNames[f.file.name]--;if(f.url)URL.revokeObjectURL(f.url);return false;}return true;});$('#uploadStatus').innerHTML=`${result.count} ${result.count===1?'image saved':'images saved'}. Analysis starts automatically. Results will appear in Recent inspections. <a class="text-link" href="#overview">View recent inspections →</a>${result.skipped_count?`<br>${result.skipped_count} non-image or invalid ZIP ${result.skipped_count===1?'entry':'entries'} skipped.`:''}${result.analysis_errors?.length?`<br>${result.analysis_errors.map(e=>escapeHtml(`${e.name}: ${e.error}`)).join('<br>')}`:''}${result.errors?.length?`<br>${result.errors.map(e=>escapeHtml(`${e.name}: ${e.error}`)).join('<br>')}`:''}`;$('#uploadStatus').classList.toggle('error',!!(result.errors?.length||result.analysis_errors?.length));await refresh();}catch(e){$('#uploadStatus').textContent=e.message;$('#uploadStatus').classList.add('error');}finally{finish();}};
  xhr.onerror=()=>{$('#uploadStatus').textContent='Connection interrupted. Check Inspections before retrying; some files may have been saved.';$('#uploadStatus').classList.add('error');finish();};xhr.ontimeout=()=>{$('#uploadStatus').textContent='The upload took too long. Check Inspections before retrying; some files may have been saved.';$('#uploadStatus').classList.add('error');finish();};xhr.send(data);
 });
 // Poll quickly while work is queued/processing, preserving images, zoom and filters.
@@ -315,7 +328,7 @@ setInterval(()=>{
  const interval=pending?2000:30000;
  if(Date.now()-lastPoll>=interval){lastPoll=Date.now();refresh();}
 },2000);
-window.addEventListener('beforeunload',()=>files.forEach(f=>URL.revokeObjectURL(f.url)));
+window.addEventListener('beforeunload',()=>files.forEach(f=>{if(f.url)URL.revokeObjectURL(f.url);}));
 refresh();
 
 // Re-measure SVG labels after viewport changes without fetching records again.

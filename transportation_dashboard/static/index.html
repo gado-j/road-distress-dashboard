@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#173c38"><title>Road distress dashboard</title>
-<link rel="stylesheet" href="/static/workspace.css?v=6">
+<link rel="stylesheet" href="/static/workspace.css?v=7">
 <link rel="stylesheet" href="/static/overview.css?v=4">
 </head>
 <body>
@@ -56,9 +56,9 @@
       </section>
     </section>
     <section id="uploadPage" class="page" hidden>
-      <div class="page-heading"><div><p class="eyebrow">ADD INSPECTION EVIDENCE</p><h1>A closer look starts here.</h1><p class="subtitle">Upload original road images to your private inspection library.</p></div><a class="text-link" href="#inspections">Back to inspections →</a></div>
+      <div class="page-heading"><div><p class="eyebrow">ADD INSPECTION EVIDENCE</p><h1>A closer look starts here.</h1><p class="subtitle">Upload road images or one ZIP archive to your private inspection library.</p></div><a class="text-link" href="#inspections">Back to inspections →</a></div>
       <div class="upload-grid"><section class="panel upload-panel">
-        <div id="dropZone" class="drop-zone"><div class="upload-symbol" aria-hidden="true">↥</div><h2>Drop your road images here</h2><p>or choose files from your device</p><label class="button primary file-label">Choose images<input id="imageInput" type="file" accept="image/jpeg,image/png,image/webp" multiple></label><span class="muted small">JPEG, PNG, WebP · up to 20 MB each · 10 images per upload</span></div>
+        <div id="dropZone" class="drop-zone"><div class="upload-symbol" aria-hidden="true">↥</div><h2>Drop images or a ZIP archive here</h2><p>or choose files from your device</p><label class="button primary file-label">Choose images or ZIP<input id="imageInput" type="file" accept="image/jpeg,image/png,image/webp,.zip,application/zip" multiple></label><span class="muted small">JPEG, PNG, WebP · 10 direct images per upload, or one ZIP with up to 50 images · 20 MB per image · 100 MB ZIP limit</span></div>
         <div id="selectionPanel" hidden><div class="selection-heading"><h2>Selected images <span id="selectionCount" class="count-pill"></span></h2><button class="text-button" id="clearFiles">Clear selection</button></div><div id="selectedFiles" class="selected-files"></div><div class="upload-actions"><span class="muted small">Original resolution is preserved.</span><button class="button primary" id="uploadButton" disabled>Upload &amp; analyze <span aria-hidden="true">↗</span></button></div></div>
         <div id="uploadProgress" hidden><label for="progressBar" id="progressLabel">Uploading…</label><progress id="progressBar" max="100" value="0"></progress></div><div id="uploadStatus" class="upload-status" role="status" aria-live="polite"></div>
       </section><aside class="upload-guide"><p class="eyebrow">WHAT HAPPENS NEXT</p><ol><li><span>01</span><div><h3>Your originals stay intact</h3><p>Images are saved in private storage, with file size and dimensions recorded.</p></div></li><li><span>02</span><div><h3>A record is created</h3><p>Every saved image appears in Hazard records with its upload date.</p></div></li><li><span>03</span><div><h3>Analyzed automatically</h3><p>Uploads are queued for the model. Saved predictions appear in Recent inspections; failed analyses can be retried.</p></div></li></ol><div class="guide-note">Image uploads are supported now. Video and expert review will follow in later development.</div></aside></div>
@@ -68,5 +68,5 @@
 <dialog id="detailsDialog" class="details-dialog" aria-labelledby="detailsTitle"><div class="details-layout"><div class="detail-image-side"><div class="image-toolbar"><span>ORIGINAL IMAGE</span><div><button id="zoomButton" class="image-tool" aria-pressed="false">Zoom in</button><a id="openOriginal" class="image-tool" target="_blank" rel="noopener">Open original ↗</a></div></div><div class="image-viewport" id="imageViewport"><img id="detailImage" alt="" tabindex="0"><p id="previewError" class="preview-error" hidden>Could not load the image. Close and reopen this record to retry.</p></div></div><section class="detail-info"><button id="closeDetails" class="close-details" aria-label="Close inspection details">×</button><p class="eyebrow">INSPECTION DETAILS</p><h2 id="detailsTitle"></h2><div id="detailBadges" class="badge-row"></div><div id="detailMetadata"></div><div class="detail-section"><h3>Analysis results</h3><button type="button" class="button primary" id="analyzeImage">Analyze and save</button><p id="analysisProgress" role="status" aria-live="polite"></p><div id="modelPreview"></div><div id="detailResults"></div></div><div class="detail-section"><h3>Expert review</h3><div id="detailReview"></div></div><div class="detail-bottom"><button id="deleteImage" class="danger-button">Delete image</button><p id="detailStatus" role="status"></p></div></section></div></dialog>
 <script src="/static/upload-chart.js?v=5"></script>
 <script src="/static/cracking-chart.js?v=3"></script>
-<script src="/static/workspace.js?v=14"></script>
+<script src="/static/workspace.js?v=15"></script>
 </body></html>

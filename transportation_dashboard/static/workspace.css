@@ -6,6 +6,7 @@
 
 /* Risk uses text as well as color, including an explicit source for demo values. */
 .report-panel{max-width:760px}.report-form{display:flex;align-items:end;gap:14px;padding:8px 25px 18px;flex-wrap:wrap}.report-form label{display:grid;gap:7px;font-size:11px;font-weight:600;color:var(--muted)}.report-form input{min-height:43px;padding:8px 12px;border:1px solid var(--line);border-radius:7px;font:inherit;color:var(--ink);background:#fff}.report-form .button{min-height:43px}.report-note{padding:0 25px 15px;font-size:11px;color:var(--muted);line-height:1.6}@media(max-width:650px){.report-form{display:grid;grid-template-columns:1fr 1fr;padding:4px 18px 16px}.report-form .button{grid-column:1/-1}.report-form input{width:100%}.report-note{padding-left:18px;padding-right:18px}}
+.zip-symbol{display:grid;place-items:center;flex:0 0 51px;height:44px;border-radius:8px;background:#e4f1ec;color:#23675e;font-size:11px;font-weight:700;letter-spacing:.5px}
 .badge.risk-low{background:#e7f2ec;color:#286f54}.badge.risk-medium{background:#fff2d5;color:#8d691e}.badge.risk-high{background:#fae7e5;color:#aa4e45}
 @media(min-width:651px){.records-table th:first-child{width:28%}.records-table th,.records-table td{padding-left:10px;padding-right:10px}.records-table .badge{font-size:8px;padding:5px 6px}}
 

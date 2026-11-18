@@ -26,7 +26,7 @@ If you start inside `transportation_dashboard`, use `cd ../YOLO11s_Pavement` to 
 
 ## Upload and inspect
 
-1. Select **Upload images**, choose a JPEG, PNG, or WebP image, and click **Upload & analyze**.
+1. Select **Upload images**, choose up to 10 JPEG/PNG/WebP files or one ZIP containing up to 50 candidate images, and click **Upload & analyze**. ZIP uploads skip text files, metadata, and invalid image entries; the response reports how many were skipped.
 2. Open **Overview → Recent inspections**. The dashboard saves the original and queues analysis automatically.
 3. Wait for **Completed**, then open the image. Details show YOLO labels, detection counts, per-box confidence, and an image with saved boxes drawn over the original.
 4. A failed run keeps the original. Fix the cause and click **Retry analysis**. Older records can be analyzed again with YOLO from their details.
@@ -35,7 +35,7 @@ If you start inside `transportation_dashboard`, use `cd ../YOLO11s_Pavement` to 
 
 Open **Reports** in the sidebar, choose the dates when analysis completed, and select **Open report**. The new tab shows each image's latest saved completed run in that period, its original, annotated result, and model labels. Select **Print / Save as PDF** and choose **Save as PDF** in the browser print dialog. Dates use Central Time. The date range can span up to one year; if it contains more than 200 completed runs, choose a shorter range. The report excludes pending, failed, and unsaved preview results.
 
-The dashboard accepts up to ten images per upload, at most 20 MiB each. Analysis accepts at most 4 million pixels per image. It processes one image at a time. An empty detection result does not prove the pavement is free of distress.
+The dashboard accepts up to ten direct images per upload, or one ZIP up to 100 MiB with at most 50 candidate images. Each image may be at most 20 MiB; total uncompressed ZIP contents may be at most 200 MiB. Analysis accepts at most 4 million pixels per image. It processes one image at a time. An empty detection result does not prove the pavement is free of distress.
 
 ## What happens behind the scenes
 

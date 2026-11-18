@@ -7,6 +7,7 @@ from typing import Literal
 import re
 import io
 import warnings
+import zipfile
 from uuid import UUID
 
 from PIL import Image, ImageDraw, UnidentifiedImageError
@@ -156,34 +157,91 @@ async def upload_images(files: list[UploadFile] = File(...)):
             if len(content) > 20 * 1024 * 1024:
                 errors.append({"name": name, "error": "Image exceeds the 20 MB upload limit."})
                 continue
-            try:
-                with warnings.catch_warnings():
-                    warnings.simplefilter("error", Image.DecompressionBombWarning)
-                    with Image.open(io.BytesIO(content)) as image:
-                        fmt, (width, height) = image.format, image.size
-                        image.verify()
-                types = {"JPEG": ("image/jpeg", ".jpg"), "PNG": ("image/png", ".png"), "WEBP": ("image/webp", ".webp")}
-                if fmt not in types:
-                    raise ValueError("Unsupported image format")
-            except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError, Image.DecompressionBombWarning):
-                errors.append({"name": name, "error": "Choose a valid JPEG, PNG, or WebP image."})
-                continue
-            mime, suffix = types[fmt]
-            try:
-                item = await run_in_threadpool(storage.save_image, content, name, mime, width, height, suffix)
-                saved.append(item)
-                try:
-                    import analysis_jobs
-                    record = await run_in_threadpool(storage.media_record, item['id'])
-                    item.update(await run_in_threadpool(analysis_jobs.enqueue, record))
-                    item['analysis_status'] = 'queued'
-                except Exception:
-                    analysis_errors.append({'id': item['id'], 'name': name, 'error': 'Original saved, but analysis could not be queued. Open its details and retry.'})
-            except Exception:
-                errors.append({"name": name, "error": "Could not save image to Supabase."})
+            await save_and_queue_image(content, name, saved, errors, analysis_errors)
         finally:
             await upload.close()
     return JSONResponse({"saved": saved, "count": len(saved), "errors": errors, "analysis_errors": analysis_errors}, status_code=201 if saved else 422)
+
+
+async def save_and_queue_image(content, name, saved, errors, analysis_errors):
+    """Use identical validation, storage, and model queueing for direct and ZIP uploads."""
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter('error', Image.DecompressionBombWarning)
+            with Image.open(io.BytesIO(content)) as image:
+                fmt, (width, height) = image.format, image.size
+                image.verify()
+        types = {'JPEG': ('image/jpeg', '.jpg'), 'PNG': ('image/png', '.png'), 'WEBP': ('image/webp', '.webp')}
+        if fmt not in types:
+            raise ValueError('Unsupported image format')
+    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError, Image.DecompressionBombWarning):
+        errors.append({'name': name, 'error': 'Choose a valid JPEG, PNG, or WebP image.'})
+        return
+    mime, suffix = types[fmt]
+    try:
+        item = await run_in_threadpool(storage.save_image, content, name, mime, width, height, suffix)
+        saved.append(item)
+        try:
+            import analysis_jobs
+            record = await run_in_threadpool(storage.media_record, item['id'])
+            item.update(await run_in_threadpool(analysis_jobs.enqueue, record))
+            item['analysis_status'] = 'queued'
+        except Exception:
+            analysis_errors.append({'id': item['id'], 'name': name, 'error': 'Original saved, but analysis could not be queued. Open its details and retry.'})
+    except Exception:
+        errors.append({'name': name, 'error': 'Could not save image to Supabase.'})
+
+
+@app.post('/api/upload-zip')
+async def upload_zip(file: UploadFile = File(...)):
+    """Inspect archive members without extracting paths; save valid images only."""
+    saved, errors, analysis_errors, skipped = [], [], [], []
+    try:
+        if not (file.filename or '').lower().endswith('.zip'):
+            raise HTTPException(422, 'Choose a ZIP archive.')
+        file.file.seek(0, io.SEEK_END)
+        if file.file.tell() > 100 * 1024 * 1024:
+            raise HTTPException(413, 'ZIP archive exceeds the 100 MB limit.')
+        file.file.seek(0)
+        try:
+            archive = zipfile.ZipFile(file.file)
+        except (zipfile.BadZipFile, OSError):
+            raise HTTPException(422, 'ZIP archive is invalid or incomplete.')
+        with archive:
+            members = [info for info in archive.infolist() if not info.is_dir()]
+            if len(members) > 500:
+                raise HTTPException(413, 'ZIP contains more than 500 files.')
+            if sum(info.file_size for info in members) > 200 * 1024 * 1024:
+                raise HTTPException(413, 'ZIP contents exceed the 200 MB uncompressed limit.')
+            image_members = []
+            for info in members:
+                name = Path(info.filename.replace('\\', '/')).name
+                if not name or Path(name).suffix.lower() not in {'.jpg', '.jpeg', '.png', '.webp'}:
+                    skipped.append({'name': info.filename, 'reason': 'Not an image file.'})
+                elif info.file_size > 20 * 1024 * 1024 or (info.compress_size and info.file_size > 200 * info.compress_size):
+                    skipped.append({'name': info.filename, 'reason': 'Image exceeds size or compression limits.'})
+                elif info.flag_bits & 1:
+                    skipped.append({'name': info.filename, 'reason': 'Encrypted image cannot be read.'})
+                else:
+                    image_members.append((info, name))
+            if len(image_members) > 50:
+                raise HTTPException(413, 'ZIP contains more than 50 candidate images.')
+            for info, name in image_members:
+                try:
+                    content = archive.read(info)
+                except (zipfile.BadZipFile, RuntimeError, OSError, NotImplementedError):
+                    skipped.append({'name': info.filename, 'reason': 'Image entry is unreadable.'})
+                    continue
+                before = len(errors)
+                await save_and_queue_image(content, name, saved, errors, analysis_errors)
+                if len(errors) > before and errors[-1]['error'].startswith('Choose a valid'):
+                    errors.pop()
+                    skipped.append({'name': info.filename, 'reason': 'File contents are not a valid supported image.'})
+        return JSONResponse({'saved': saved, 'count': len(saved), 'errors': errors,
+                             'analysis_errors': analysis_errors, 'skipped': skipped,
+                             'skipped_count': len(skipped)}, status_code=201 if saved else 422)
+    finally:
+        await file.close()
 
 @app.get("/api/assets/{asset_id}/preview")
 def preview(asset_id: UUID):
